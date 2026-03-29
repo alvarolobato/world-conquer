@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audioManager } from '@/systems/audio';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -50,6 +51,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    audioManager.init(this);
     this.scene.start('MainMenuScene');
   }
 }
