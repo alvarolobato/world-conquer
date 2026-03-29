@@ -6,6 +6,8 @@ import { Phase1Scene } from '@/scenes/Phase1Scene';
 import { Phase2Scene } from '@/scenes/Phase2Scene';
 import { Phase3Scene } from '@/scenes/Phase3Scene';
 import { VictoryScene } from '@/scenes/VictoryScene';
+import { SettingsScene } from '@/scenes/SettingsScene';
+import { LoadGameScene } from '@/scenes/LoadGameScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -25,6 +27,8 @@ const config: Phaser.Types.Core.GameConfig = {
     Phase2Scene,
     Phase3Scene,
     VictoryScene,
+    SettingsScene,
+    LoadGameScene,
   ],
   physics: {
     default: 'arcade',

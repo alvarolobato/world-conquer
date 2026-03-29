@@ -455,39 +455,315 @@ export class Phase2Scene extends Phaser.Scene {
     this.updateHUD();
   }
 
-  // ─── RESEARCH ───
+  // ─── RESEARCH OVERLAY ───
+
+  private researchOverlay: Phaser.GameObjects.Container | null = null;
 
   private openResearchMenu(): void {
-    const available = getAvailableResearch(this.completedResearch, this.era);
-    if (available.length === 0) {
-      this.infoText.setText('No research available. Build a Research Lab!').setColor('#ccaaff');
+    if (this.researchOverlay) {
+      this.closeOverlay(this.researchOverlay);
+      this.researchOverlay = null;
       return;
     }
+    this.closeDiplomacyPanel();
 
     if (!this.placedBuildings.some((b) => b.type === 'research_lab')) {
       this.infoText.setText('Build a Research Lab first!').setColor('#ccaaff');
       return;
     }
 
-    // Pick first affordable research (simple for now, could show menu)
-    const node = available.find((r) => canAffordResearch(r, this.resources));
-    if (node) {
-      this.resources = payForResearch(node, this.resources);
-      this.currentResearch = node.name;
-      this.researchProgress = 0;
-      this.researchTarget = node.researchTime;
-      this.infoText.setText(`Researching: ${node.name} (${node.researchTime}s)`).setColor('#ccaaff');
-      this.updateHUD();
-    } else {
-      this.infoText.setText('Cannot afford any research!').setColor('#ff4444');
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const pw = 420;
+    const ph = 400;
+    const px = (w - pw) / 2;
+    const py = 60;
+
+    const container = this.add.container(0, 0).setScrollFactor(0).setDepth(500);
+    this.researchOverlay = container;
+
+    // Dim background
+    const dim = this.add.graphics().setScrollFactor(0);
+    dim.fillStyle(0x000000, 0.5);
+    dim.fillRect(0, 0, w, h);
+    container.add(dim);
+
+    // Panel
+    const panel = this.add.graphics().setScrollFactor(0);
+    panel.fillStyle(0x1a1a3a, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 8);
+    panel.lineStyle(2, 0x4444aa, 0.8);
+    panel.strokeRoundedRect(px, py, pw, ph, 8);
+    container.add(panel);
+
+    // Title
+    container.add(this.add.text(w / 2, py + 20, '🔬 RESEARCH TREE', {
+      fontFamily: 'Arial Black', fontSize: '18px', color: '#ccaaff',
+    }).setOrigin(0.5, 0).setScrollFactor(0));
+
+    // Current research
+    if (this.currentResearch) {
+      const pct = Math.floor((this.researchProgress / this.researchTarget) * 100);
+      container.add(this.add.text(w / 2, py + 48, `In progress: ${this.currentResearch} (${pct}%)`, {
+        fontFamily: 'Arial', fontSize: '12px', color: '#ffaa44',
+      }).setOrigin(0.5, 0).setScrollFactor(0));
+    }
+
+    // Available research list
+    const available = getAvailableResearch(this.completedResearch, this.era);
+    let yOff = py + 72;
+
+    // Completed
+    if (this.completedResearch.length > 0) {
+      container.add(this.add.text(px + 15, yOff, `Completed: ${this.completedResearch.join(', ')}`, {
+        fontFamily: 'Arial', fontSize: '10px', color: '#44aa44',
+      }).setScrollFactor(0));
+      yOff += 20;
+    }
+
+    // Branches
+    const branches = ['military', 'economy', 'infrastructure'] as const;
+    const branchColors = { military: '#ff6666', economy: '#66ff66', infrastructure: '#6666ff' };
+
+    for (const branch of branches) {
+      const branchNodes = available.filter((r) => r.branch === branch);
+      if (branchNodes.length === 0) continue;
+
+      container.add(this.add.text(px + 15, yOff, `${branch.toUpperCase()}`, {
+        fontFamily: 'Arial Black', fontSize: '11px', color: branchColors[branch],
+      }).setScrollFactor(0));
+      yOff += 18;
+
+      for (const node of branchNodes) {
+        const affordable = canAffordResearch(node, this.resources);
+        const costStr = Object.entries(node.cost).map(([r, a]) => `${a} ${r}`).join(', ');
+
+        const btn = this.add.text(px + 20, yOff, `${node.name} - ${costStr} (${node.researchTime}s)`, {
+          fontFamily: 'Arial', fontSize: '11px',
+          color: affordable ? '#ffffff' : '#666688',
+          backgroundColor: affordable ? '#333366' : '#222233',
+          padding: { x: 6, y: 3 },
+        }).setScrollFactor(0).setInteractive({ useHandCursor: affordable });
+
+        if (affordable && !this.currentResearch) {
+          btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#444488' }));
+          btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#333366' }));
+          btn.on('pointerdown', () => {
+            this.resources = payForResearch(node, this.resources);
+            this.currentResearch = node.name;
+            this.researchProgress = 0;
+            this.researchTarget = node.researchTime;
+            this.closeOverlay(this.researchOverlay!);
+            this.researchOverlay = null;
+            this.infoText.setText(`Researching: ${node.name}`).setColor('#ccaaff');
+            this.updateHUD();
+          });
+        }
+
+        container.add(btn);
+
+        // Description
+        container.add(this.add.text(px + 25, yOff + 18, `→ ${node.description} | Unlocks: ${node.unlocks}`, {
+          fontFamily: 'Arial', fontSize: '9px', color: '#888899',
+        }).setScrollFactor(0));
+        yOff += 35;
+      }
+      yOff += 5;
+    }
+
+    // Close button
+    const closeBtn = this.add.text(px + pw - 30, py + 8, '✕', {
+      fontFamily: 'Arial Black', fontSize: '18px', color: '#ff4444',
+    }).setScrollFactor(0).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => {
+      this.closeOverlay(this.researchOverlay!);
+      this.researchOverlay = null;
+    });
+    container.add(closeBtn);
+  }
+
+  // ─── DIPLOMACY OVERLAY ───
+
+  private diplomacyOverlay: Phaser.GameObjects.Container | null = null;
+
+  private showDiplomacy(): void {
+    if (this.diplomacyOverlay) {
+      this.closeOverlay(this.diplomacyOverlay);
+      this.diplomacyOverlay = null;
+      return;
+    }
+    if (this.researchOverlay) {
+      this.closeOverlay(this.researchOverlay);
+      this.researchOverlay = null;
+    }
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const pw = 440;
+    const ph = 360;
+    const px = (w - pw) / 2;
+    const py = 60;
+
+    const container = this.add.container(0, 0).setScrollFactor(0).setDepth(500);
+    this.diplomacyOverlay = container;
+
+    // Dim
+    const dim = this.add.graphics().setScrollFactor(0);
+    dim.fillStyle(0x000000, 0.5);
+    dim.fillRect(0, 0, w, h);
+    container.add(dim);
+
+    // Panel
+    const panel = this.add.graphics().setScrollFactor(0);
+    panel.fillStyle(0x1a1a3a, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 8);
+    panel.lineStyle(2, 0x4488aa, 0.8);
+    panel.strokeRoundedRect(px, py, pw, ph, 8);
+    container.add(panel);
+
+    // Title
+    container.add(this.add.text(w / 2, py + 20, '🤝 DIPLOMACY', {
+      fontFamily: 'Arial Black', fontSize: '18px', color: '#66ccff',
+    }).setOrigin(0.5, 0).setScrollFactor(0));
+
+    // Player list with relationship and actions
+    const otherPlayers = this.players.filter((p) => p.id !== this.humanPlayer.id);
+    let yOff = py + 55;
+
+    for (const player of otherPlayers) {
+      const colorHex = `#${player.color.toString(16).padStart(6, '0')}`;
+      const relation = this.diplomacy.relations.get(this.humanPlayer.id)?.get(player.id) ?? 0;
+      const isWar = this.diplomacy.warStates.some(
+        (ws) => ws.active && (ws.attacker === player.id || ws.defender === player.id) &&
+        (ws.attacker === this.humanPlayer.id || ws.defender === this.humanPlayer.id)
+      );
+      const isAllied = this.diplomacy.treaties.some(
+        (t) => t.active && t.type === 'alliance' as any &&
+        t.players.includes(player.id) && t.players.includes(this.humanPlayer.id)
+      );
+
+      const regionCount = this.gameMap.regions.filter((r) => r.owner === player.id).length;
+
+      // Player row bg
+      const rowBg = this.add.graphics().setScrollFactor(0);
+      rowBg.fillStyle(0x222244, 0.7);
+      rowBg.fillRoundedRect(px + 10, yOff - 5, pw - 20, 65, 4);
+      container.add(rowBg);
+
+      // Color dot + name
+      const dot = this.add.graphics().setScrollFactor(0);
+      dot.fillStyle(player.color, 1);
+      dot.fillCircle(px + 25, yOff + 12, 6);
+      container.add(dot);
+
+      container.add(this.add.text(px + 40, yOff + 4, `${player.name}`, {
+        fontFamily: 'Arial', fontSize: '14px', color: colorHex,
+      }).setScrollFactor(0));
+
+      // Status
+      const statusStr = isWar ? '⚔️ AT WAR' : isAllied ? '🤝 ALLIED' : '😐 Neutral';
+      const statusColor = isWar ? '#ff4444' : isAllied ? '#44ff44' : '#888899';
+      container.add(this.add.text(px + 40, yOff + 22, `${statusStr} | Relation: ${relation} | Regions: ${regionCount}`, {
+        fontFamily: 'Arial', fontSize: '10px', color: statusColor,
+      }).setScrollFactor(0));
+
+      // Relation bar
+      const barX = px + 40;
+      const barY = yOff + 40;
+      const barW = 100;
+      const barBg = this.add.graphics().setScrollFactor(0);
+      barBg.fillStyle(0x440000, 1);
+      barBg.fillRect(barX, barY, barW, 6);
+      barBg.fillStyle(relation > 0 ? 0x00aa44 : 0xaa0000, 1);
+      barBg.fillRect(barX + barW / 2, barY, (relation / 100) * (barW / 2), 6);
+      container.add(barBg);
+
+      // Action buttons
+      const actionX = px + pw - 170;
+      if (!isAllied && !isWar) {
+        const allyBtn = this.add.text(actionX, yOff + 8, 'Ally', {
+          fontFamily: 'Arial', fontSize: '11px', color: '#44ff44',
+          backgroundColor: '#224422', padding: { x: 6, y: 3 },
+        }).setScrollFactor(0).setInteractive({ useHandCursor: true });
+        allyBtn.on('pointerdown', () => {
+          import('@/systems/diplomacy').then(({ proposeAlliance }) => {
+            proposeAlliance(this.diplomacy, this.humanPlayer.id, player.id);
+            this.closeOverlay(this.diplomacyOverlay!);
+            this.diplomacyOverlay = null;
+            this.infoText.setText(`Alliance formed with ${player.name}!`).setColor('#44ff44');
+          });
+        });
+        container.add(allyBtn);
+      }
+
+      if (!isWar) {
+        const warBtn = this.add.text(actionX + 50, yOff + 8, 'War', {
+          fontFamily: 'Arial', fontSize: '11px', color: '#ff4444',
+          backgroundColor: '#442222', padding: { x: 6, y: 3 },
+        }).setScrollFactor(0).setInteractive({ useHandCursor: true });
+        warBtn.on('pointerdown', () => {
+          import('@/systems/diplomacy').then(({ declareWar }) => {
+            declareWar(this.diplomacy, this.humanPlayer.id, player.id);
+            this.closeOverlay(this.diplomacyOverlay!);
+            this.diplomacyOverlay = null;
+            this.infoText.setText(`War declared on ${player.name}!`).setColor('#ff4444');
+          });
+        });
+        container.add(warBtn);
+      } else {
+        const peaceBtn = this.add.text(actionX, yOff + 8, 'Peace', {
+          fontFamily: 'Arial', fontSize: '11px', color: '#ffaa44',
+          backgroundColor: '#443322', padding: { x: 6, y: 3 },
+        }).setScrollFactor(0).setInteractive({ useHandCursor: true });
+        peaceBtn.on('pointerdown', () => {
+          import('@/systems/diplomacy').then(({ declarePeace }) => {
+            declarePeace(this.diplomacy, this.humanPlayer.id, player.id);
+            this.closeOverlay(this.diplomacyOverlay!);
+            this.diplomacyOverlay = null;
+            this.infoText.setText(`Peace signed with ${player.name}!`).setColor('#ffaa44');
+          });
+        });
+        container.add(peaceBtn);
+      }
+
+      const tradeBtn = this.add.text(actionX + 95, yOff + 8, 'Trade', {
+        fontFamily: 'Arial', fontSize: '11px', color: '#ffcc44',
+        backgroundColor: '#333322', padding: { x: 6, y: 3 },
+      }).setScrollFactor(0).setInteractive({ useHandCursor: true });
+      tradeBtn.on('pointerdown', () => {
+        import('@/systems/diplomacy').then(({ proposeTradeAgreement }) => {
+          proposeTradeAgreement(this.diplomacy, this.humanPlayer.id, player.id);
+          this.closeOverlay(this.diplomacyOverlay!);
+          this.diplomacyOverlay = null;
+          this.infoText.setText(`Trade agreement with ${player.name}!`).setColor('#ffcc44');
+        });
+      });
+      container.add(tradeBtn);
+
+      yOff += 75;
+    }
+
+    // Close button
+    const closeBtn = this.add.text(px + pw - 30, py + 8, '✕', {
+      fontFamily: 'Arial Black', fontSize: '18px', color: '#ff4444',
+    }).setScrollFactor(0).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => {
+      this.closeOverlay(this.diplomacyOverlay!);
+      this.diplomacyOverlay = null;
+    });
+    container.add(closeBtn);
+  }
+
+  private closeDiplomacyPanel(): void {
+    if (this.diplomacyOverlay) {
+      this.closeOverlay(this.diplomacyOverlay);
+      this.diplomacyOverlay = null;
     }
   }
 
-  // ─── DIPLOMACY ───
-
-  private showDiplomacy(): void {
-    const allies = this.players.filter((p) => p.isAI).map((p) => p.name).join(', ');
-    this.infoText.setText(`Players: ${allies} | Diplomacy panel coming soon...`).setColor('#66ccff');
+  private closeOverlay(container: Phaser.GameObjects.Container): void {
+    container.removeAll(true);
+    container.destroy();
   }
 
   // ─── COMBAT TRANSITION ───
