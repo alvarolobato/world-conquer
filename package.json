@@ -1,0 +1,27 @@
+{
+  "name": "world-conquer",
+  "version": "1.0.0",
+  "description": "A browser-based strategy game: expand, build, conquer",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:34365/git/alvarolobato/world-conquer"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "phaser": "^3.90.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
+  }
+}
